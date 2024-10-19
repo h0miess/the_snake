@@ -1,4 +1,5 @@
 from random import randint, choice
+import os.path
 
 import pygame
 
@@ -7,6 +8,8 @@ SCREEN_WIDTH, SCREEN_HEIGHT = 640, 480
 GRID_SIZE = 20
 GRID_WIDTH = SCREEN_WIDTH // GRID_SIZE
 GRID_HEIGHT = SCREEN_HEIGHT // GRID_SIZE
+
+CENTER_X, CENTER_Y = SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2
 
 # Направления движения:
 UP = (0, -1)
@@ -38,11 +41,22 @@ BLUEBERRY_COLOR = (0, 0, 255)
 # Скорость движения змейки:
 SPEED = 14
 
+# Названия файла с сохраненным рекордом
+RECORD_FILE_NAME = "record.txt"
+
 # Настройка игрового окна:
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), 0, 32)
 
+record = ""
+if os.path.exists(RECORD_FILE_NAME):
+    with open(RECORD_FILE_NAME, 'r') as file:
+        try:
+            record = str(int(file.readline()))
+        except ValueError:
+            pass
+
 # Заголовок окна игрового поля:
-pygame.display.set_caption("Змейка")
+pygame.display.set_caption("Змейка" + record)
 
 # Настройка времени:
 clock = pygame.time.Clock()
@@ -53,7 +67,7 @@ class GameObject:
     """Базовый класс объекта игры"""
 
     def __init__(self, body_color=None):
-        self.position = (SCREEN_HEIGHT / 2, SCREEN_WIDTH / 2)
+        self.position = (CENTER_X, CENTER_Y)
         self.body_color = body_color
 
     def draw(self):
@@ -72,7 +86,8 @@ class Eat(GameObject):
         """Выбор случайной позиции в пределах игрового поля"""
         self.position = (
             randint(0, GRID_WIDTH - 1) * GRID_SIZE,
-            randint(0, GRID_HEIGHT - 1) * GRID_SIZE)
+            randint(0, GRID_HEIGHT - 1) * GRID_SIZE,
+        )
 
     def draw(self):
         """Отрисовка"""
@@ -127,13 +142,9 @@ class Snake(GameObject):
 
     def draw(self):
         """Отрисовка"""
-        for position in self.positions[:-1]:
-            rect = pygame.Rect(position, (GRID_SIZE, GRID_SIZE))
-            pygame.draw.rect(screen, self.body_color, rect)
-            pygame.draw.rect(screen, BORDER_COLOR, rect, 1)
-
         # Отрисовка головы змейки
-        head_rect = pygame.Rect(self.positions[0], (GRID_SIZE, GRID_SIZE))
+        head_rect = pygame.Rect(self.get_head_position(),
+                                (GRID_SIZE, GRID_SIZE))
         pygame.draw.rect(screen, self.body_color, head_rect)
         pygame.draw.rect(screen, BORDER_COLOR, head_rect, 1)
 
@@ -161,26 +172,34 @@ class Snake(GameObject):
         """Обновление координат змейки"""
         new_position = None
         if self.direction == RIGHT:
-            new_position = (self.get_head_position()[0] + GRID_SIZE,
-                            self.get_head_position()[1])
+            new_position = (
+                self.get_head_position()[0] + GRID_SIZE,
+                self.get_head_position()[1],
+            )
 
             if new_position[0] > SCREEN_WIDTH - GRID_SIZE:
                 new_position = (0, new_position[1])
         elif self.direction == LEFT:
-            new_position = (self.get_head_position()[0] - GRID_SIZE,
-                            self.get_head_position()[1])
+            new_position = (
+                self.get_head_position()[0] - GRID_SIZE,
+                self.get_head_position()[1],
+            )
 
             if new_position[0] < 0:
                 new_position = (SCREEN_WIDTH - GRID_SIZE, new_position[1])
         elif self.direction == UP:
-            new_position = (self.get_head_position()[0],
-                            self.get_head_position()[1] - GRID_SIZE)
+            new_position = (
+                self.get_head_position()[0],
+                self.get_head_position()[1] - GRID_SIZE,
+            )
 
             if new_position[1] < 0:
                 new_position = (new_position[0], SCREEN_HEIGHT - GRID_SIZE)
         elif self.direction == DOWN:
-            new_position = (self.get_head_position()[0],
-                            self.get_head_position()[1] + GRID_SIZE)
+            new_position = (
+                self.get_head_position()[0],
+                self.get_head_position()[1] + GRID_SIZE,
+            )
 
             if new_position[1] > SCREEN_HEIGHT - GRID_SIZE:
                 new_position = (new_position[0], 0)
@@ -200,15 +219,33 @@ class Snake(GameObject):
         столкновения с собой.
         """
         self.length = 1
-        self.positions = [(SCREEN_WIDTH / 2, SCREEN_WIDTH / 2)]
+        self.positions = [(CENTER_X, CENTER_Y)]
 
 
-def handle_keys(game_object):
+def save_record(length):
+    """Функция для записи рекорда"""
+    with open(RECORD_FILE_NAME, "w+") as file:
+        prev_record = None
+        try:
+            prev_record = int(file.readline())
+        except ValueError:
+            pass
+        if prev_record is None or length > prev_record:
+            file.write(str(length))
+
+
+def quit_game(game_object, record):
+    """Функция выхода из игры"""
+    pygame.quit()
+    save_record(record)
+    raise SystemExit
+
+
+def handle_keys(game_object, record):
     """Функция обработки действий пользователя"""
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            pygame.quit()
-            raise SystemExit
+            quit_game(game_object, record)
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_UP and game_object.direction != DOWN:
                 game_object.next_direction = UP
@@ -218,6 +255,9 @@ def handle_keys(game_object):
                 game_object.next_direction = LEFT
             elif event.key == pygame.K_RIGHT and game_object.direction != LEFT:
                 game_object.next_direction = RIGHT
+            elif event.key == pygame.K_ESCAPE:
+                quit_game(game_object, record)
+                raise SystemExit
 
 
 def main() -> None:
@@ -231,19 +271,25 @@ def main() -> None:
     bad_eat_list = [Banana(), Grape(), Blueberry()]
     bad_eat: Eat = choice(bad_eat_list)
 
+    session_record = int(record) if record != '' else 1
+
     while apple.position in snake.positions:
         apple = apple.randomize_position()
 
     while True:
         clock.tick(SPEED)
-        handle_keys(snake)
+        handle_keys(snake, session_record)
         snake.update_direction()
         snake.move()
         snake_head = snake.get_head_position()
-        if (apple.position == snake_head or bad_eat.position == snake_head):
+        if apple.position == snake_head or bad_eat.position == snake_head:
 
             if apple.position == snake_head:
                 snake.length += 1
+
+                if snake.length > session_record:
+                    session_record = snake.length
+
             elif bad_eat.position == snake_head:
                 snake.decrease()
 
@@ -270,6 +316,7 @@ def main() -> None:
         snake.draw()
         apple.draw()
         bad_eat.draw()
+        pygame.display.set_caption(f"Змейка. Рекорд: {session_record}!")
         pygame.display.update()
 
 
