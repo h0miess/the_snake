@@ -1,4 +1,4 @@
-from random import randint
+from random import randint, choice
 
 import pygame
 
@@ -26,6 +26,15 @@ APPLE_COLOR = (255, 0, 0)
 # Цвет змейки
 SNAKE_COLOR = (0, 255, 0)
 
+# Цвет банана
+BANANA_COLOR = (255, 255, 0)
+
+# Цвет персика
+GRAPE_COLOR = (252, 15, 192)
+
+# Цвет голубики
+BLUEBERRY_COLOR = (0, 0, 255)
+
 # Скорость движения змейки:
 SPEED = 14
 
@@ -52,11 +61,11 @@ class GameObject:
         pass
 
 
-class Apple(GameObject):
-    """Класс, описывающий яблоко"""
+class Eat(GameObject):
+    """Абстрактный класс, описывающий объект еды"""
 
-    def __init__(self):
-        super().__init__(body_color=APPLE_COLOR)
+    def __init__(self, body_color):
+        super().__init__(body_color=body_color)
         self.randomize_position()
 
     def randomize_position(self):
@@ -70,6 +79,39 @@ class Apple(GameObject):
         rect = pygame.Rect(self.position, (GRID_SIZE, GRID_SIZE))
         pygame.draw.rect(screen, self.body_color, rect)
         pygame.draw.rect(screen, BORDER_COLOR, rect, 1)
+
+    def clear(self):
+        """Очистка объекта с игрового поля"""
+        rect = pygame.Rect(self.position, (GRID_SIZE, GRID_SIZE))
+        pygame.draw.rect(screen, BOARD_BACKGROUND_COLOR, rect)
+
+
+class Apple(Eat):
+    """Класс, описывающий яблоко"""
+
+    def __init__(self):
+        super().__init__(body_color=APPLE_COLOR)
+
+
+class Banana(Eat):
+    """Класс, описывающий банан (неправильная еда)"""
+
+    def __init__(self):
+        super().__init__(BANANA_COLOR)
+
+
+class Grape(Eat):
+    """Класс, описывающий виноград (неправильная еда)"""
+
+    def __init__(self):
+        super().__init__(GRAPE_COLOR)
+
+
+class Blueberry(Eat):
+    """Класс, описывающий голубику (неправильная еда)"""
+
+    def __init__(self):
+        super().__init__(BLUEBERRY_COLOR)
 
 
 class Snake(GameObject):
@@ -99,6 +141,15 @@ class Snake(GameObject):
         if self.last:
             last_rect = pygame.Rect(self.last, (GRID_SIZE, GRID_SIZE))
             pygame.draw.rect(screen, BOARD_BACKGROUND_COLOR, last_rect)
+
+    def decrease(self):
+        """Уменьшить длину змейки на 1 квадратик"""
+        if self.length == 1:
+            return
+
+        self.length -= 1
+        tail = pygame.Rect(self.positions.pop(), (GRID_SIZE, GRID_SIZE))
+        pygame.draw.rect(screen, BOARD_BACKGROUND_COLOR, tail)
 
     def update_direction(self):
         """Метод обновления направления после нажатия на кнопку"""
@@ -169,7 +220,7 @@ def handle_keys(game_object):
                 game_object.next_direction = RIGHT
 
 
-def main():
+def main() -> None:
     """Основная функция игры"""
     # Инициализация PyGame:
     pygame.init()
@@ -177,30 +228,48 @@ def main():
     snake = Snake()
     apple = Apple()
 
+    bad_eat_list = [Banana(), Grape(), Blueberry()]
+    bad_eat: Eat = choice(bad_eat_list)
+
     while apple.position in snake.positions:
-        apple = Apple()
+        apple = apple.randomize_position()
 
     while True:
         clock.tick(SPEED)
         handle_keys(snake)
         snake.update_direction()
         snake.move()
-        if snake.get_head_position() == apple.position:
-            snake.length += 1
-            apple = Apple()
+        snake_head = snake.get_head_position()
+        if (apple.position == snake_head or bad_eat.position == snake_head):
+
+            if apple.position == snake_head:
+                snake.length += 1
+            elif bad_eat.position == snake_head:
+                snake.decrease()
+
+            apple.clear()
+            apple.randomize_position()
+
+            bad_eat.clear()
+            bad_eat: Eat = choice(bad_eat_list)
+            bad_eat.randomize_position()
 
             while apple.position in snake.positions:
-                apple = Apple()
+                apple.randomize_position()
+
+            while bad_eat.position in snake.positions:
+                bad_eat.randomize_position()
 
         if snake.get_head_position() in snake.positions[1:]:
             snake.reset()
-            rect = pygame.Rect((0, 0), (SCREEN_HEIGHT, SCREEN_WIDTH))
+
+            # Очистка всего поля
+            rect = pygame.Rect((0, 0), (SCREEN_WIDTH, SCREEN_HEIGHT))
             pygame.draw.rect(screen, BOARD_BACKGROUND_COLOR, rect)
 
-        print(snake.positions)
-        print(f'apple: {apple.position}')
         snake.draw()
         apple.draw()
+        bad_eat.draw()
         pygame.display.update()
 
 
